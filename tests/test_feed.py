@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from recalls.feed import parse
+from recalls.sources.base import parse_rss as parse
 
 FIXTURE = Path(__file__).parent / "fixtures" / "fda_sample.xml"
 

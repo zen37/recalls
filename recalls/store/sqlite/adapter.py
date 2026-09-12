@@ -61,6 +61,12 @@ class SqliteAlertStore:
             conn.execute(sql.ADD_LAST_UPDATED)
         for r in conn.execute(sql.SELECT_ROWS_MISSING_HASH).fetchall():
             conn.execute(sql.SET_CONTENT_HASH, (content_hash(_row_to_alert(r)), r["guid"]))
+        # alerts_history gained `source` later: add it + backfill before seeding
+        # (the seed insert references the source column).
+        hist_cols = {r["name"] for r in conn.execute(sql.HISTORY_TABLE_INFO)}
+        if "source" not in hist_cols:
+            conn.execute(sql.ADD_HISTORY_SOURCE)
+            conn.execute(sql.BACKFILL_HISTORY_SOURCE)
         conn.execute(sql.SEED_HISTORY_FOR_UNTRACKED)
 
     def sync(self, alerts: list[Alert]) -> SyncResult:
@@ -95,7 +101,7 @@ class SqliteAlertStore:
         conn.execute(
             sql.INSERT_HISTORY,
             (alert.guid, change_type, alert.title, alert.link, alert.published,
-             alert.summary, h),
+             alert.summary, alert.source, h),
         )
 
     def history(self, guid: str | None = None, limit: int = 50) -> list[HistoryEntry]:
@@ -117,6 +123,7 @@ class SqliteAlertStore:
                 link=r["link"],
                 published=r["published"] or "",
                 summary=r["summary"] or "",
+                source=r["source"] or "",
                 changed_at=r["changed_at"],
             )
             for r in rows

@@ -41,6 +41,7 @@ class HistoryEntry:
     link: str
     published: str
     summary: str
+    source: str
     changed_at: str
 
 

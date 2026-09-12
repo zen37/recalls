@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS alerts_history (
     link          TEXT NOT NULL,
     published     TEXT,
     summary       TEXT,
+    source        TEXT,                -- which feed the alert came from
     content_hash  TEXT NOT NULL,
     changed_at    TEXT NOT NULL DEFAULT ({NOW})
 );
@@ -55,14 +56,23 @@ SELECT_ROWS_MISSING_HASH = (
 )
 SET_CONTENT_HASH = "UPDATE alerts SET content_hash = ? WHERE guid = ?"
 
+# alerts_history gained `source` after some DBs already had history rows.
+HISTORY_TABLE_INFO = "PRAGMA table_info(alerts_history)"
+ADD_HISTORY_SOURCE = "ALTER TABLE alerts_history ADD COLUMN source TEXT"
+BACKFILL_HISTORY_SOURCE = (
+    "UPDATE alerts_history SET source = "
+    "(SELECT a.source FROM alerts a WHERE a.guid = alerts_history.guid) "
+    "WHERE source IS NULL"
+)
+
 # Seed a baseline 'new' history row for any alert with no history yet (rows
 # stored before alerts_history existed), stamped at first_seen so the timeline
 # stays truthful rather than collapsing to "now".
 SEED_HISTORY_FOR_UNTRACKED = """
 INSERT INTO alerts_history
-    (guid, change_type, title, link, published, summary, content_hash, changed_at)
+    (guid, change_type, title, link, published, summary, source, content_hash, changed_at)
 SELECT a.guid, 'new', a.title, a.link, a.published, a.summary,
-       a.content_hash, a.first_seen
+       a.source, a.content_hash, a.first_seen
 FROM alerts a
 LEFT JOIN alerts_history h ON h.guid = a.guid
 WHERE h.guid IS NULL
@@ -87,8 +97,8 @@ WHERE guid = ?
 
 INSERT_HISTORY = """
 INSERT INTO alerts_history
-    (guid, change_type, title, link, published, summary, content_hash)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+    (guid, change_type, title, link, published, summary, source, content_hash)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 # -- Reads ----------------------------------------------------------------------
@@ -112,8 +122,8 @@ LIMIT ?
 
 # history() appends an optional "WHERE guid = ?" and always an ORDER/LIMIT tail.
 SELECT_HISTORY = (
-    "SELECT history_id, guid, change_type, title, link, published, summary, changed_at "
-    "FROM alerts_history"
+    "SELECT history_id, guid, change_type, title, link, published, summary, "
+    "source, changed_at FROM alerts_history"
 )
 HISTORY_WHERE_GUID = " WHERE guid = ?"
 HISTORY_ORDER_LIMIT = " ORDER BY history_id DESC LIMIT ?"

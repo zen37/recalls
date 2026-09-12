@@ -16,8 +16,20 @@ def _alert(guid: str) -> Alert:
     )
 
 
+class _FakeSource:
+    name = "fake"
+    country = "us"
+
+    def __init__(self, alerts):
+        self._alerts = alerts
+
+    def poll(self, config):
+        return list(self._alerts)
+
+
 def _patch_feed(monkeypatch, alerts):
-    monkeypatch.setattr(poll_mod, "poll_feed", lambda config: list(alerts))
+    # Replace the country's source list with a single fake source (offline).
+    monkeypatch.setattr(poll_mod, "sources_for", lambda country: [_FakeSource(alerts)])
 
 
 def test_cold_start_all_new_is_not_a_gap(tmp_path, monkeypatch):

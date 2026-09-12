@@ -1,7 +1,9 @@
 """Runtime config, assembled from the environment with sensible defaults.
 
-Kept tiny on purpose -- a real-time poller needs a feed URL, somewhere to store
-alerts, and a polite User-Agent. Everything else is a later concern.
+Kept tiny on purpose. The one structural choice here is `country`: it selects
+both which sources to poll (via the sources registry) and which per-country
+database to write (``_data/<country>.db``) -- so a run is always scoped to one
+jurisdiction, mirroring the per-country isolation on the store side.
 """
 
 from __future__ import annotations
@@ -9,36 +11,42 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-# FDA "Recalls, Market Withdrawals & Safety Alerts" feed -- the lead source.
-DEFAULT_FEED_URL = (
-    "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/recalls/rss.xml"
-)
-DEFAULT_DB_PATH = "_data/recalls.db"
+DEFAULT_COUNTRY = "us"
+DEFAULT_DATA_DIR = "_data"
 DEFAULT_USER_AGENT = "recalls-alerts/0.1 (+https://github.com/zen37/recalls)"
 
 # Which store backend to use. "sqlite" is the single-machine default; a cloud
 # backend (e.g. "postgres") is added as a new adapter behind the AlertStore port.
 DEFAULT_STORE_BACKEND = "sqlite"
 
-# Which feed a stored alert came from. One source today; a column so more can be
-# added without a migration.
-SOURCE_FDA = "fda"
+
+def _default_db_path(country: str) -> str:
+    """Per-country DB file, e.g. _data/us.db."""
+    return os.path.join(DEFAULT_DATA_DIR, f"{country}.db")
 
 
 @dataclass(frozen=True)
 class Config:
-    feed_url: str = DEFAULT_FEED_URL
-    db_path: str = DEFAULT_DB_PATH
+    country: str = DEFAULT_COUNTRY
+    db_path: str = _default_db_path(DEFAULT_COUNTRY)
     user_agent: str = DEFAULT_USER_AGENT
-    source: str = SOURCE_FDA
     store_backend: str = DEFAULT_STORE_BACKEND
+    # Optional override of a source's feed URL (single-source convenience; a
+    # source falls back to its own default when this is None).
+    feed_url: str | None = None
 
     @classmethod
-    def from_env(cls, env: dict[str, str] | None = None) -> "Config":
+    def from_env(
+        cls, env: dict[str, str] | None = None, *, country: str | None = None
+    ) -> "Config":
+        """Build config from the environment. `country` (e.g. a --country flag)
+        overrides RECALLS_COUNTRY, which overrides the default."""
         env = env if env is not None else dict(os.environ)
+        country = (country or env.get("RECALLS_COUNTRY", DEFAULT_COUNTRY)).lower()
         return cls(
-            feed_url=env.get("RECALLS_FEED_URL", DEFAULT_FEED_URL),
-            db_path=env.get("RECALLS_DB_PATH", DEFAULT_DB_PATH),
+            country=country,
+            db_path=env.get("RECALLS_DB_PATH") or _default_db_path(country),
             user_agent=env.get("RECALLS_USER_AGENT", DEFAULT_USER_AGENT),
             store_backend=env.get("RECALLS_STORE", DEFAULT_STORE_BACKEND),
+            feed_url=env.get("RECALLS_FEED_URL") or None,
         )

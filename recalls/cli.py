@@ -15,6 +15,7 @@ import sys
 
 from .config import Config
 from .poll import poll_once
+from .sources import sources_for
 from .store import open_store
 
 
@@ -59,8 +60,8 @@ def _cmd_list(config: Config, query: str | None, limit: int) -> int:
             print("no alerts stored yet -- run `python -m recalls poll` first")
         return 0
     for a in alerts:
-        print(f"{a.published or '?':<25}  {a.title}")
-        print(f"{'':<25}  {a.link}")
+        print(f"{a.published or '?':<25}  {'[' + a.source + ']':<8}  {a.title}")
+        print(f"{'':<25}  {'':<8}  {a.link}")
     return 0
 
 
@@ -127,7 +128,7 @@ def _cmd_history(
         chrono = list(reversed(entries))
         prev = None
         for e in chrono:
-            print(f"[{e.history_id}] {e.changed_at}  {e.change_type.upper()}")
+            print(f"[{e.history_id}] {e.changed_at}  {e.change_type.upper()}  [{e.source}]")
             if prev is None:
                 for line in _entry_fields(e):
                     print(f"    {line}")
@@ -147,10 +148,11 @@ def _cmd_history(
         return 0
 
     for e in entries:
-        print(f"[{e.history_id:>5}] {e.changed_at:<22} {e.change_type.upper():<8} {e.title}")
-        print(f"{'':>8} {'':<22} {'':<8} {e.link}")
+        print(f"[{e.history_id:>5}] {e.changed_at:<22} {e.change_type.upper():<8} "
+              f"{'[' + e.source + ']':<8} {e.title}")
+        print(f"{'':>8} {'':<22} {'':<8} {'':<8} {e.link}")
         if full:
-            print(f"{'':>8} {'':<22} {'':<8} {e.summary}")
+            print(f"{'':>8} {'':<22} {'':<8} {'':<8} {e.summary}")
     return 0
 
 
@@ -159,13 +161,20 @@ def main(argv: list[str] | None = None) -> int:
     _configure_logging()
 
     parser = argparse.ArgumentParser(prog="recalls", description=__doc__)
+    # Shared across subcommands: which country's sources/db to operate on.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
+        "--country",
+        help="country to operate on (overrides RECALLS_COUNTRY; default 'us')",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("poll", help="fetch the feed once and store new alerts")
-    p_list = sub.add_parser("list", help="show recent stored alerts")
+    sub.add_parser("poll", parents=[common], help="fetch the feed once and store new alerts")
+    p_list = sub.add_parser("list", parents=[common], help="show recent stored alerts")
     p_list.add_argument("query", nargs="?",
                         help="filter to alerts whose guid/title contains this substring")
     p_list.add_argument("--limit", type=int, default=20, help="how many to show")
-    p_hist = sub.add_parser("history", help="show change history (new/updated events)")
+    p_hist = sub.add_parser("history", parents=[common],
+                            help="show change history (new/updated events)")
     p_hist.add_argument("query", nargs="?",
                         help="scope to one alert by a substring of its guid/title (URL)")
     p_hist.add_argument("--id", type=int, dest="event_id",
@@ -177,16 +186,24 @@ def main(argv: list[str] | None = None) -> int:
                         help="show field-level changes between versions (best with a guid/--id)")
 
     args = parser.parse_args(argv)
-    config = Config.from_env()
+    config = Config.from_env(country=args.country)
 
-    if args.command == "poll":
-        return _cmd_poll(config)
-    if args.command == "list":
-        return _cmd_list(config, args.query, args.limit)
-    if args.command == "history":
-        return _cmd_history(
-            config, args.query, args.event_id, args.limit, args.full, args.diff
-        )
+    try:
+        # Validate the country up front (before any DB file is created) so an
+        # unsupported RECALLS_COUNTRY fails cleanly instead of leaving a stray db.
+        sources_for(config.country)
+        if args.command == "poll":
+            return _cmd_poll(config)
+        if args.command == "list":
+            return _cmd_list(config, args.query, args.limit)
+        if args.command == "history":
+            return _cmd_history(
+                config, args.query, args.event_id, args.limit, args.full, args.diff
+            )
+    except ValueError as exc:
+        # e.g. unsupported country / store backend -- a config problem, not a bug.
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     parser.error(f"unknown command {args.command!r}")
     return 2
 

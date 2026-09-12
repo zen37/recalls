@@ -76,9 +76,17 @@ is the paged-backfill job of the sibling [`recalls-os`](https://github.com/zen37
 
 ```
 recalls/
-  config.py    feed URL, db path, user-agent, log level (from .env)
+  config.py    country, per-country db path, user-agent, log level (from .env)
   models.py    Alert — the thin alert record
-  feed.py      fetch (httpx) + parse (feedparser) RSS -> [Alert]
+  sources/     per-country feeds (the code that differs by country)
+    base.py      Source Protocol + shared RSS parsing
+    __init__.py  country -> sources registry; sources_for(country)
+    us/          United States
+      fda.py       FdaSource (FDA Recalls RSS)
+      __init__.py  SOURCES = [FdaSource()]
+    ca/          Canada — skeleton to fill in (see "Adding a country")
+      cfia.py      CfiaSource stub (not implemented)
+      __init__.py  SOURCES = []
   store/       AlertStore port + adapters (swap the backend, don't rewrite)
     base.py      AlertStore Protocol + SyncResult / HistoryEntry + content_hash
     __init__.py  open_store(config) factory -> picks the backend
@@ -87,9 +95,30 @@ recalls/
       sql.py       all SQLite SQL/DDL as named constants (dialect isolated here)
       __init__.py  exports SqliteAlertStore
     # a cloud backend later is a sibling folder, e.g. postgres/
-  poll.py      one poll cycle: fetch -> classify -> store -> log
+  poll.py      one poll cycle: for the country, poll each source -> store -> log
   cli.py       `poll` / `list` / `history`
 tests/         offline parse + dedupe + factory tests over an RSS fixture
 ```
 
-Alerts land in `_data/recalls.db` (gitignored).
+A run is scoped to one **country**: it polls that country's sources and writes
+to its own database, `_data/<country>.db` (e.g. `_data/us.db`) — gitignored. The
+country comes from `--country`, else `RECALLS_COUNTRY`, else the default `us`:
+
+```bash
+uv run python -m recalls poll                 # default: us
+uv run python -m recalls poll --country ca     # explicit (best for cron)
+```
+
+### Adding a country
+
+The store, dedupe, history, and CLI are country-agnostic — only the feed differs.
+`sources/ca/` is a ready-made skeleton (Canada). To add a country `<cc>`:
+
+1. In `sources/<cc>/`, implement a `Source` (see `us/fda.py` for the pattern;
+   reuse `sources/base.parse_rss` if the feed is RSS) and export it from the
+   package's `SOURCES` list.
+2. Register it in `sources/__init__.py`'s `_REGISTRY` (`"<cc>": <cc>.SOURCES`).
+3. Document the feed in [`docs/data-sources.md`](docs/data-sources.md).
+
+Then `RECALLS_COUNTRY=<cc> uv run python -m recalls poll` writes `_data/<cc>.db`.
+No changes to the store, poll loop, or CLI.
