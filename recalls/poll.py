@@ -11,6 +11,7 @@ import logging
 from dataclasses import dataclass, field
 
 from .config import Config
+from .landing import Landing
 from .models import Alert
 from .sources import sources_for
 from .store.base import AlertStore
@@ -30,14 +31,16 @@ class PollResult:
     possible_gap: bool = False
 
 
-def poll_once(config: Config, store: AlertStore) -> PollResult:
+def poll_once(config: Config, store: AlertStore, landing: Landing) -> PollResult:
     prior_count = store.count()
     fetched = 0
     new: list[Alert] = []
     updated: list[Alert] = []
 
     for source in sources_for(config.country):
-        alerts = source.poll(config)
+        raw = source.fetch(config)
+        landing.land(config.country, source.name, raw)  # raw kept before parsing
+        alerts = source.parse(raw)
         result = store.sync(alerts)
         fetched += len(alerts)
         new.extend(result.new)

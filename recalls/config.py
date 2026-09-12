@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 DEFAULT_COUNTRY = "us"
 DEFAULT_DATA_DIR = "_data"
+DEFAULT_LANDING_DIR = "_landing"
 DEFAULT_USER_AGENT = "recalls-alerts/0.1 (+https://github.com/zen37/recalls)"
 
 # Which store backend to use. "sqlite" is the single-machine default; a cloud
@@ -29,6 +30,7 @@ def _default_db_path(country: str) -> str:
 class Config:
     country: str = DEFAULT_COUNTRY
     db_path: str = _default_db_path(DEFAULT_COUNTRY)
+    landing_dir: str = DEFAULT_LANDING_DIR
     user_agent: str = DEFAULT_USER_AGENT
     store_backend: str = DEFAULT_STORE_BACKEND
     # Optional override of a source's feed URL (single-source convenience; a
@@ -46,6 +48,7 @@ class Config:
         return cls(
             country=country,
             db_path=env.get("RECALLS_DB_PATH") or _default_db_path(country),
+            landing_dir=env.get("RECALLS_LANDING_DIR", DEFAULT_LANDING_DIR),
             user_agent=env.get("RECALLS_USER_AGENT", DEFAULT_USER_AGENT),
             store_backend=env.get("RECALLS_STORE", DEFAULT_STORE_BACKEND),
             feed_url=env.get("RECALLS_FEED_URL") or None,

@@ -219,7 +219,8 @@ __marimo__/
 
 .DS_Store
 
-# Local data (SQLite store) and logs
+# Local data (SQLite store), raw landing zone, and logs
 _data/
+_landing/
 *.db
 *.log

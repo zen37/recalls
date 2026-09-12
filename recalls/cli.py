@@ -14,6 +14,7 @@ import os
 import sys
 
 from .config import Config
+from .landing import open_landing
 from .poll import poll_once
 from .sources import sources_for
 from .store import open_store
@@ -37,7 +38,8 @@ def _configure_logging() -> None:
 
 def _cmd_poll(config: Config) -> int:
     store = open_store(config)
-    result = poll_once(config, store)
+    landing = open_landing(config)
+    result = poll_once(config, store, landing)
     print(
         f"fetched {result.fetched}, {len(result.new)} new, "
         f"{len(result.updated)} updated"

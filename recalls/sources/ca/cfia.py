@@ -23,9 +23,15 @@ class CfiaSource:
     name = "cfia"
     country = "ca"
 
-    def poll(self, config: Config) -> list[Alert]:
-        # TODO: fetch DEFAULT_FEED_URL (honoring config.feed_url override) and
-        # parse it into Alert records with source=self.name.
+    def fetch(self, config: Config) -> bytes:
+        # TODO: GET DEFAULT_FEED_URL (honoring config.feed_url override).
+        raise NotImplementedError(
+            "Canada (CFIA) source not implemented yet -- see docs/data-sources.md#canada"
+        )
+
+    def parse(self, raw: bytes) -> list[Alert]:
+        # TODO: parse raw into Alert records with source=self.name
+        # (reuse ..base.parse_rss if the feed is RSS).
         raise NotImplementedError(
             "Canada (CFIA) source not implemented yet -- see docs/data-sources.md#canada"
         )

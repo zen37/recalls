@@ -5,8 +5,8 @@ newly published alerts, and stores them — so a consumer learns about a recall 
 day it is announced ("is this in my fridge?"), not weeks later.
 
 ```
-FDA Recalls RSS ──▶ fetch ──▶ parse ──▶ classify new / updated / unchanged ──▶ store (SQLite) ──▶ list
-                                          (dedupe on guid, content-hash change)
+FDA Recalls RSS ─▶ fetch ─▶ land raw ─▶ parse ─▶ classify new/updated/unchanged ─▶ store (SQLite) ─▶ list
+                            (audit/replay)         (dedupe on guid, content-hash)
 ```
 
 **Lead source:** the FDA "Recalls, Market Withdrawals & Safety Alerts" RSS feed —
@@ -78,8 +78,9 @@ is the paged-backfill job of the sibling [`recalls-os`](https://github.com/zen37
 recalls/
   config.py    country, per-country db path, user-agent, log level (from .env)
   models.py    Alert — the thin alert record
+  landing.py   raw landing zone: gzip exact feed bytes before parsing (deduped)
   sources/     per-country feeds (the code that differs by country)
-    base.py      Source Protocol + shared RSS parsing
+    base.py      Source Protocol (fetch/parse) + shared RSS parsing
     __init__.py  country -> sources registry; sources_for(country)
     us/          United States
       fda.py       FdaSource (FDA Recalls RSS)
@@ -100,14 +101,17 @@ recalls/
 tests/         offline parse + dedupe + factory tests over an RSS fixture
 ```
 
+Each poll first **lands the raw feed** (gzipped, byte-for-byte) under
+`_landing/<country>/<source>/` before parsing — deduped by content hash so an
+unchanged window isn't re-stored. This matters because the feed is a rolling
+window you can't re-fetch: landing the raw lets us replay/re-parse history if the
+parser improves or had a bug, and is an audit trail of what each feed said.
+
 A run is scoped to one **country**: it polls that country's sources and writes
 to its own database, `_data/<country>.db` (e.g. `_data/us.db`) — gitignored. The
-country comes from `--country`, else `RECALLS_COUNTRY`, else the default `us`:
-
-```bash
-uv run python -m recalls poll                 # default: us
-uv run python -m recalls poll --country ca     # explicit (best for cron)
-```
+`poll`/`list`/`history` commands above default to `us`; target another country
+with `--country` (or `RECALLS_COUNTRY`), e.g. `... poll --country ca`.
+Precedence: `--country` → `RECALLS_COUNTRY` → default `us`.
 
 ### Adding a country
 

@@ -22,13 +22,21 @@ logger = logging.getLogger("recalls.sources")
 
 
 class Source(Protocol):
-    """One official recall feed for one jurisdiction."""
+    """One official recall feed for one jurisdiction.
+
+    Split fetch/parse so the raw bytes can be landed (audit/replay) between the
+    two -- see recalls.landing and poll.poll_once.
+    """
 
     name: str      # source id stored on each alert, e.g. "fda"
     country: str   # ISO-ish country code, e.g. "us"
 
-    def poll(self, config: Config) -> list[Alert]:
-        """Fetch + parse the feed into Alerts (network)."""
+    def fetch(self, config: Config) -> bytes:
+        """Fetch the raw feed bytes (network)."""
+        ...
+
+    def parse(self, raw: bytes) -> list[Alert]:
+        """Parse raw feed bytes into Alerts (no network)."""
         ...
 
 
