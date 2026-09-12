@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0" xml:base="http://www.fda.gov/">
+  <channel>
+    <title>Food and Drugs Administration--Recalls/Safety Alerts</title>
+    <link>http://www.fda.gov/</link>
+    <description/>
+    <language>en</language>
+    <item>
+      <title>Acme Foods Recalls Bagged Spinach Due to Listeria</title>
+      <link>http://www.fda.gov/safety/recalls/acme-spinach-listeria</link>
+      <description>Acme Foods of Salinas, CA is recalling bagged spinach because it may be contaminated with Listeria monocytogenes.</description>
+      <pubDate>Fri, 11 Sep 2026 18:15:00 EDT</pubDate>
+      <dc:creator>FDA</dc:creator>
+      <guid isPermaLink="true">http://www.fda.gov/safety/recalls/acme-spinach-listeria</guid>
+    </item>
+    <item>
+      <title>Sunrise Dairy Allergy Alert on Undeclared Milk in Ice Cream</title>
+      <link>http://www.fda.gov/safety/recalls/sunrise-dairy-undeclared-milk</link>
+      <description>Sunrise Dairy is recalling cartons of vanilla ice cream because they contain undeclared milk.</description>
+      <pubDate>Thu, 10 Sep 2026 09:00:00 EDT</pubDate>
+      <dc:creator>FDA</dc:creator>
+      <guid isPermaLink="true">http://www.fda.gov/safety/recalls/sunrise-dairy-undeclared-milk</guid>
+    </item>
+  </channel>
+</rss>
