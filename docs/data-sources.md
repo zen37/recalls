@@ -70,7 +70,7 @@ FDA. Its RSS is shaped exactly like the FDA feed, so parsing reuses the same
 | **Feed (RSS)** | `https://www.fsis.usda.gov/fsis-content/rss/recalls.xml` |
 | **Human page** | https://www.fsis.usda.gov/recalls |
 | **Format** | RSS 2.0 (XML) |
-| **Auth** | None (but the CDN may reject non-browser User-Agents — see limits) |
+| **Auth** | None, but bot-protected — must be fetched with a browser TLS fingerprint (see limits) |
 | **Freshness** | Same day — recalls and public health alerts as FSIS posts them |
 | **Coverage** | FSIS-regulated products: **meat, poultry, processed egg products**; includes both recalls (Class I–III) and public health alerts |
 | **Record identity** | RSS `<guid>` (`isPermaLink="true"`) = the announcement URL. We dedupe on this. |
@@ -88,11 +88,15 @@ FDA. Its RSS is shaped exactly like the FDA feed, so parsing reuses the same
 
 **Known limits we design around:**
 
-- **Bot/CDN filtering.** The feed sits behind Akamai, which returns `403` to
-  requests that don't look like a browser. We send a descriptive `User-Agent`
-  (`RECALLS_USER_AGENT`); if a poll starts 403-ing, a more browser-like UA is
-  the first thing to try. A source failing this way is logged and skipped, so it
-  never blocks the FDA feed (see `poll.py` per-source isolation).
+- **Bot/CDN filtering.** The feed sits behind Akamai Bot Manager, which returns
+  `403` based on the client's **TLS/HTTP-2 fingerprint**, not its `User-Agent` —
+  a plain `httpx`/`requests` call is blocked no matter what UA it sends, while a
+  real browser loads the same URL fine. So `FsisSource.fetch` uses
+  [`curl_cffi`](https://github.com/lexiforest/curl_cffi) with `impersonate="chrome"`,
+  which replays Chrome's actual TLS handshake. (FDA needs none of this and stays
+  on `httpx`.) If FSIS starts 403-ing again, bump the impersonation target to a
+  newer Chrome. A source failing this way is logged and skipped, so it never
+  blocks the FDA feed (see `poll.py` per-source isolation).
 - **Both recalls and public health alerts.** Unlike FDA, the feed mixes firm
   recalls with FSIS-issued public health alerts (issued when a recall can't yet
   be recommended). Both are real, actionable consumer alerts, so we ingest both;
@@ -100,6 +104,11 @@ FDA. Its RSS is shaped exactly like the FDA feed, so parsing reuses the same
 - **HTML in the summary.** `description` is CDATA HTML leading with an icon
   `<img>`; we store it verbatim (same as the feed gives it). Any stripping is a
   presentation concern for a future UI/notifier, not ingestion.
+- **`"pha"` glued to some titles.** On *public health alert* items the feed's own
+  `<title>` ends with a stray `pha` token (e.g. `...Contaminationpha`) — an
+  upstream category tag leaking into the title, not a parse bug. We store the
+  title verbatim; stripping a trailing `pha` is an optional source-specific
+  cleanup left for a presentation layer.
 - **Rolling window & "updates in place"** behave like FDA (see above): a revised
   notice keeps its guid; content changes are caught by hash and recorded in
   `alerts_history`.

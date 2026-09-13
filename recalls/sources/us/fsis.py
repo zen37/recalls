@@ -11,13 +11,19 @@ See docs/data-sources.md for the source's coverage and limits.
 
 from __future__ import annotations
 
-import httpx
+from curl_cffi import requests as curl_requests
 
 from ...config import Config
 from ...models import Alert
 from ..base import parse_rss
 
 DEFAULT_FEED_URL = "https://www.fsis.usda.gov/fsis-content/rss/recalls.xml"
+
+# The FSIS feed is behind Akamai Bot Manager, which blocks (403) clients whose
+# TLS/HTTP-2 fingerprint doesn't match a real browser -- a plain httpx/requests
+# UA change does not help. curl_cffi with ``impersonate`` replays Chrome's actual
+# TLS handshake, so the request looks like the browser that loads the feed fine.
+_IMPERSONATE = "chrome"
 
 
 class FsisSource:
@@ -32,11 +38,13 @@ class FsisSource:
         return DEFAULT_FEED_URL
 
     def fetch(self, config: Config, *, timeout: float = 30.0) -> bytes:
-        resp = httpx.get(
+        # Note: we rely on curl_cffi's browser-matched headers (from impersonate)
+        # rather than forcing config.user_agent -- overriding the UA alone would
+        # desync it from the TLS fingerprint and re-trip the bot check.
+        resp = curl_requests.get(
             self.feed_url(config),
-            headers={"User-Agent": config.user_agent},
+            impersonate=_IMPERSONATE,
             timeout=timeout,
-            follow_redirects=True,
         )
         resp.raise_for_status()
         return resp.content

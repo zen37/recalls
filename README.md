@@ -124,11 +124,37 @@ unchanged window isn't re-stored. This matters because the feed is a rolling
 window you can't re-fetch: landing the raw lets us replay/re-parse history if the
 parser improves or had a bug, and is an audit trail of what each feed said.
 
+### Fetching: why FSIS isn't fetched like FDA
+
+Both feeds are the same RSS shape and share one parser (`base.parse_rss`), so the
+*parsing* is identical — only the HTTP fetch differs, and only for FSIS:
+
+- **FDA** ([`us/fda.py`](recalls/sources/us/fda.py)) is a plain `httpx.get`. It
+  serves the feed to any client; nothing special is needed.
+- **FSIS** ([`us/fsis.py`](recalls/sources/us/fsis.py)) sits behind **Akamai Bot
+  Manager**, which returns `403` based on the caller's **TLS/HTTP-2 fingerprint**,
+  not its `User-Agent`. A plain `httpx`/`requests` call is blocked no matter what
+  UA string it sends — but the *same URL loads fine in a real browser*. Proof:
+  every `httpx` attempt (default UA, spoofed Chrome UA, browser `Accept` headers)
+  returned `403` from the same machine whose Chrome opened the feed without issue.
+
+  So `FsisSource.fetch` uses [`curl_cffi`](https://github.com/lexiforest/curl_cffi)
+  with `impersonate="chrome"`, which replays Chrome's actual TLS handshake. That
+  is the *whole* fix — it's a fingerprint problem, not geography, IP reputation, or
+  auth (switching to FSIS's JSON API wouldn't help: it's behind the same Akamai
+  host and 403s the same way). We deliberately **don't** apply `curl_cffi` to FDA:
+  FDA doesn't need it, and keeping the lighter `httpx` path there makes the reason
+  for the heavier client on FSIS explicit rather than blanket policy. If FSIS
+  starts 403-ing again, bump the impersonation target to a newer Chrome; a fetch
+  failure is logged and skipped, so it never blocks the FDA feed
+  (see `poll.py` per-source isolation). Full details: [`docs/data-sources.md`](docs/data-sources.md#fsis--usda-recalls--public-health-alerts).
+
 A run is scoped to one **country**: it polls that country's sources and writes
-to its own database, `_data/<country>.db` (e.g. `_data/us.db`) — gitignored. The
-`poll`/`list`/`history` commands above default to `us`; target another country
-with `--country` (or `RECALLS_COUNTRY`), e.g. `... poll --country ca`.
-Precedence: `--country` → `RECALLS_COUNTRY` → default `us`.
+to its own database, `_data/<country>.db` (e.g. `_data/us.db`) — gitignored. All
+three commands (`poll`/`list`/`history`) **require** `--country`, so a run never
+silently targets the wrong per-country db; `poll` additionally requires
+`--source`. (`RECALLS_COUNTRY` still sets the default for programmatic
+`Config.from_env` use, but the CLI always makes you pass the flag.)
 
 ### Adding a country
 
