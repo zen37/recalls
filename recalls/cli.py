@@ -49,6 +49,13 @@ def _cmd_poll(config: Config) -> int:
             "WARNING: every fetched item was new -- you may have fallen behind the "
             "feed window and missed older recalls. Poll more frequently."
         )
+    for err in result.errors:
+        print(f"WARNING: source failed -- {err}")
+    # Healthy feeds already ran; only treat the cycle as failed when a source
+    # errored and nothing at all came back, so a scheduler/cron can alert on a
+    # total outage while a partial failure (one feed down) still exits 0.
+    if result.errors and result.fetched == 0:
+        return 1
     return 0
 
 
@@ -59,7 +66,10 @@ def _cmd_list(config: Config, query: str | None, limit: int) -> int:
         if query:
             print(f"no alerts match {query!r}")
         else:
-            print("no alerts stored yet -- run `python -m recalls poll` first")
+            print(
+                "no alerts stored yet -- run "
+                f"`python -m recalls poll --country {config.country} --source all` first"
+            )
         return 0
     for a in alerts:
         print(f"{a.published or '?':<25}  {'[' + a.source + ']':<8}  {a.title}")
@@ -117,7 +127,10 @@ def _cmd_history(
 
     entries = store.history(guid=guid, limit=limit)
     if not entries:
-        print("no history yet -- run `python -m recalls poll` first")
+        print(
+            "no history yet -- run "
+            f"`python -m recalls poll --country {config.country} --source all` first"
+        )
         return 0
 
     if diff:
@@ -163,14 +176,23 @@ def main(argv: list[str] | None = None) -> int:
     _configure_logging()
 
     parser = argparse.ArgumentParser(prog="recalls", description=__doc__)
-    # Shared across subcommands: which country's sources/db to operate on.
+    # Shared by the read commands (list/history): which country's db to read.
+    # Required like `poll`'s own --country, so every invocation names its target
+    # explicitly and can't silently read the wrong per-country db.
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
-        "--country",
-        help="country to operate on (overrides RECALLS_COUNTRY; default 'us')",
+        "--country", required=True,
+        help="country to operate on, e.g. 'us' (required)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("poll", parents=[common], help="fetch the feed once and store new alerts")
+    # `poll` writes/fetches, so it requires an explicit target -- no silent
+    # defaults in prod. `--source all` polls every feed for the country.
+    p_poll = sub.add_parser("poll", help="fetch a source once and store new alerts")
+    p_poll.add_argument("--country", required=True,
+                        help="country to poll, e.g. 'us' (required)")
+    p_poll.add_argument("--source", required=True,
+                        help="source to poll, e.g. 'fda', or 'all' for every "
+                             "source in the country (required)")
     p_list = sub.add_parser("list", parents=[common], help="show recent stored alerts")
     p_list.add_argument("query", nargs="?",
                         help="filter to alerts whose guid/title contains this substring")
@@ -188,12 +210,15 @@ def main(argv: list[str] | None = None) -> int:
                         help="show field-level changes between versions (best with a guid/--id)")
 
     args = parser.parse_args(argv)
-    config = Config.from_env(country=args.country)
+    config = Config.from_env(
+        country=args.country, source=getattr(args, "source", None)
+    )
 
     try:
-        # Validate the country up front (before any DB file is created) so an
-        # unsupported RECALLS_COUNTRY fails cleanly instead of leaving a stray db.
-        sources_for(config.country)
+        # Validate country (and, for poll, the source) up front -- before any DB
+        # file is created -- so a bad --country/--source fails cleanly instead of
+        # leaving a stray db.
+        sources_for(config.country, config.source)
         if args.command == "poll":
             return _cmd_poll(config)
         if args.command == "list":

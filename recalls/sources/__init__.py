@@ -22,16 +22,33 @@ _REGISTRY: dict[str, list[Source]] = {
 }
 
 
-def sources_for(country: str) -> list[Source]:
-    """The sources to poll for a country, or a clear error if unsupported."""
+def sources_for(country: str, source: str | None = None) -> list[Source]:
+    """The sources to poll for a country, or a clear error if unsupported.
+
+    `source` narrows the result: a source name returns just that feed; None or
+    "all" returns every feed for the country. An unknown name errors, listing the
+    valid ones -- so a typo in a prod `--source` flag fails loudly, not silently.
+    """
     try:
-        return _REGISTRY[country]
+        country_sources = _REGISTRY[country]
     except KeyError:
         supported = ", ".join(sorted(_REGISTRY)) or "(none)"
         raise ValueError(
             f"no sources configured for country {country!r} "
-            f"(supported: {supported}; set RECALLS_COUNTRY)"
+            f"(supported: {supported}; set --country/RECALLS_COUNTRY)"
         )
+
+    if source is None or source == "all":
+        return country_sources
+
+    selected = [s for s in country_sources if s.name == source]
+    if not selected:
+        available = ", ".join(s.name for s in country_sources) or "(none)"
+        raise ValueError(
+            f"no source {source!r} for country {country!r} "
+            f"(available: {available}, or 'all')"
+        )
+    return selected
 
 
 def countries() -> list[str]:

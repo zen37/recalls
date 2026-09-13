@@ -36,13 +36,22 @@ class Config:
     # Optional override of a source's feed URL (single-source convenience; a
     # source falls back to its own default when this is None).
     feed_url: str | None = None
+    # Which source(s) within the country to poll: a source name (e.g. "fda"),
+    # the literal "all", or None (= all). `poll` sets this explicitly; the read
+    # commands leave it None since they operate on the whole per-country store.
+    source: str | None = None
 
     @classmethod
     def from_env(
-        cls, env: dict[str, str] | None = None, *, country: str | None = None
+        cls,
+        env: dict[str, str] | None = None,
+        *,
+        country: str | None = None,
+        source: str | None = None,
     ) -> "Config":
         """Build config from the environment. `country` (e.g. a --country flag)
-        overrides RECALLS_COUNTRY, which overrides the default."""
+        overrides RECALLS_COUNTRY, which overrides the default. `source` (a
+        --source flag) selects which feed(s) to poll; None means all."""
         env = env if env is not None else dict(os.environ)
         country = (country or env.get("RECALLS_COUNTRY", DEFAULT_COUNTRY)).lower()
         return cls(
@@ -52,4 +61,5 @@ class Config:
             user_agent=env.get("RECALLS_USER_AGENT", DEFAULT_USER_AGENT),
             store_backend=env.get("RECALLS_STORE", DEFAULT_STORE_BACKEND),
             feed_url=env.get("RECALLS_FEED_URL") or None,
+            source=(source.lower() if source else None),
         )

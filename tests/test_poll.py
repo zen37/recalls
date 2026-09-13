@@ -33,7 +33,9 @@ class _FakeSource:
 
 def _patch_feed(monkeypatch, alerts):
     # Replace the country's source list with a single fake source (offline).
-    monkeypatch.setattr(poll_mod, "sources_for", lambda country: [_FakeSource(alerts)])
+    monkeypatch.setattr(
+        poll_mod, "sources_for", lambda country, source=None: [_FakeSource(alerts)]
+    )
 
 
 def test_cold_start_all_new_is_not_a_gap(tmp_path, monkeypatch):
@@ -77,3 +79,60 @@ def test_empty_feed_is_not_a_gap(tmp_path, monkeypatch):
     _patch_feed(monkeypatch, [])
     result = poll_once(Config.from_env(), store, NullLanding())
     assert result.possible_gap is False
+
+
+class _BrokenSource:
+    """A source whose fetch always fails (e.g. a CDN 403)."""
+
+    name = "broken"
+    country = "us"
+
+    def fetch(self, config):
+        raise RuntimeError("403 Forbidden")
+
+    def parse(self, raw):  # pragma: no cover - never reached
+        return []
+
+
+def test_one_source_failing_does_not_abort_the_poll(tmp_path, monkeypatch):
+    # Healthy source first, broken source second: the broken one must not
+    # suppress the healthy one's alerts.
+    good = _FakeSource([_alert("a"), _alert("b")])
+    monkeypatch.setattr(
+        poll_mod, "sources_for", lambda country, source=None: [good, _BrokenSource()]
+    )
+    store = AlertStore(str(tmp_path / "r.db"))
+
+    result = poll_once(Config.from_env(), store, NullLanding())
+
+    assert [a.guid for a in result.new] == ["a", "b"]  # healthy feed still stored
+    assert result.fetched == 2
+    assert len(result.errors) == 1
+    assert result.errors[0].startswith("broken: ")
+
+
+def test_broken_source_first_still_runs_the_rest(tmp_path, monkeypatch):
+    # Order independence: a failure in the first source must not skip later ones.
+    good = _FakeSource([_alert("a")])
+    monkeypatch.setattr(
+        poll_mod, "sources_for", lambda country, source=None: [_BrokenSource(), good]
+    )
+    store = AlertStore(str(tmp_path / "r.db"))
+
+    result = poll_once(Config.from_env(), store, NullLanding())
+
+    assert [a.guid for a in result.new] == ["a"]
+    assert len(result.errors) == 1
+
+
+def test_all_sources_failing_yields_errors_and_no_fetch(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        poll_mod, "sources_for", lambda country, source=None: [_BrokenSource(), _BrokenSource()]
+    )
+    store = AlertStore(str(tmp_path / "r.db"))
+
+    result = poll_once(Config.from_env(), store, NullLanding())
+
+    assert result.fetched == 0
+    assert result.new == []
+    assert len(result.errors) == 2

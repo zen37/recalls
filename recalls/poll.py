@@ -29,6 +29,10 @@ class PollResult:
     # Items could have scrolled off a window between polls without being captured
     # (see README / "polling cadence"). Not raised on a cold start (empty store).
     possible_gap: bool = False
+    # Sources that failed this cycle, as "<source>: <reason>". A failing source
+    # is logged and skipped so the others still complete -- one feed being down
+    # (e.g. a 403 from its CDN) must not suppress alerts from the healthy feeds.
+    errors: list[str] = field(default_factory=list)
 
 
 def poll_once(config: Config, store: AlertStore, landing: Landing) -> PollResult:
@@ -36,12 +40,23 @@ def poll_once(config: Config, store: AlertStore, landing: Landing) -> PollResult
     fetched = 0
     new: list[Alert] = []
     updated: list[Alert] = []
+    errors: list[str] = []
 
-    for source in sources_for(config.country):
-        raw = source.fetch(config)
-        landing.land(config.country, source.name, raw)  # raw kept before parsing
-        alerts = source.parse(raw)
-        result = store.sync(alerts)
+    for source in sources_for(config.country, config.source):
+        try:
+            raw = source.fetch(config)
+            landing.land(config.country, source.name, raw)  # raw kept before parsing
+            alerts = source.parse(raw)
+            result = store.sync(alerts)
+        except Exception as exc:
+            # Isolate per source: a failing feed (network error, CDN 403, bad
+            # payload) is logged and skipped so the remaining sources still run.
+            errors.append(f"{source.name}: {exc}")
+            logger.warning(
+                "poll source failed country=%s source=%s -- skipping: %s",
+                config.country, source.name, exc,
+            )
+            continue
         fetched += len(alerts)
         new.extend(result.new)
         updated.extend(result.updated)
@@ -55,8 +70,8 @@ def poll_once(config: Config, store: AlertStore, landing: Landing) -> PollResult
             logger.info("UPDATED ALERT [%s] %s -- %s", a.published or "?", a.title, a.link)
 
     logger.info(
-        "poll complete country=%s fetched=%s new=%s updated=%s total_stored=%s",
-        config.country, fetched, len(new), len(updated), store.count(),
+        "poll complete country=%s fetched=%s new=%s updated=%s failed=%s total_stored=%s",
+        config.country, fetched, len(new), len(updated), len(errors), store.count(),
     )
 
     possible_gap = prior_count > 0 and fetched > 0 and len(new) == fetched
@@ -69,4 +84,6 @@ def poll_once(config: Config, store: AlertStore, landing: Landing) -> PollResult
             config.country, fetched,
         )
 
-    return PollResult(fetched=fetched, new=new, updated=updated, possible_gap=possible_gap)
+    return PollResult(
+        fetched=fetched, new=new, updated=updated, possible_gap=possible_gap, errors=errors
+    )

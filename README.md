@@ -34,8 +34,8 @@ not just that it did. The `alerts` table holds the current state; `alerts_histor
 holds the audit trail. View it with:
 
 ```bash
-uv run python -m recalls history                # recent change events
-uv run python -m recalls history <guid-url>     # one alert's full timeline
+uv run python -m recalls history --country us              # recent change events
+uv run python -m recalls history --country us <guid-url>   # one alert's full timeline
 ```
 
 First cut (this repo): **ingest + detect new/updated**. A notifier (email/push/webhook)
@@ -45,17 +45,29 @@ and a read API/UI are clean seams left for later.
 
 ```bash
 uv sync
-cp .env.example .env          # optional; sensible defaults otherwise
-uv run python -m recalls poll   # fetch once, store new alerts, log what's new
-uv run python -m recalls list   # show recent stored alerts
-uv run pytest                   # tests (offline; RSS fixture)
+cp .env.example .env                                   # optional; sensible defaults otherwise
+uv run python -m recalls poll --country us --source fda    # fetch one feed, store new alerts
+uv run python -m recalls poll --country us --source all    # every feed for the country
+uv run python -m recalls list --country us                 # show recent stored alerts
+uv run pytest                                           # tests (offline; RSS fixture)
 ```
 
-Poll on a schedule with cron/systemd, e.g. every 15 min:
+`poll` requires an explicit `--country` and `--source` — no silent defaults on
+the write path, so a prod/cron invocation always states exactly what it fetches.
+`--source` is a source name (e.g. `fda`) or `all` for every feed of the country.
+(`list`/`history` still default to `us`; they only read the store.)
+
+Poll on a schedule with cron/systemd, e.g. every 15 min. Give each source its own
+line — sources can warrant different cadences, and one feed being down must not
+delay another:
 
 ```
-*/15 * * * * cd /path/to/recalls && uv run python -m recalls poll >> poll.log 2>&1
+*/15 * * * * cd /path/to/recalls && uv run python -m recalls poll --country us --source fda >> poll.log 2>&1
 ```
+
+A single source failing is logged and skipped, and the run still exits 0 as long
+as another source succeeded; only a total outage (every source failed) exits
+non-zero, so cron/systemd alerts on that.
 
 ### Polling cadence & the window-gap warning
 
@@ -124,5 +136,5 @@ The store, dedupe, history, and CLI are country-agnostic — only the feed diffe
 2. Register it in `sources/__init__.py`'s `_REGISTRY` (`"<cc>": <cc>.SOURCES`).
 3. Document the feed in [`docs/data-sources.md`](docs/data-sources.md).
 
-Then `RECALLS_COUNTRY=<cc> uv run python -m recalls poll` writes `_data/<cc>.db`.
-No changes to the store, poll loop, or CLI.
+Then `uv run python -m recalls poll --country <cc> --source all` writes
+`_data/<cc>.db`. No changes to the store, poll loop, or CLI.
