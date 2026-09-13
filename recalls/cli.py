@@ -191,8 +191,8 @@ def main(argv: list[str] | None = None) -> int:
     p_poll.add_argument("--country", required=True,
                         help="country to poll, e.g. 'us' (required)")
     p_poll.add_argument("--source", required=True,
-                        help="source to poll, e.g. 'fda', or 'all' for every "
-                             "source in the country (required)")
+                        help="source to poll, e.g. 'fda' or 'fsis', or 'all' "
+                             "for every source in the country (required)")
     p_list = sub.add_parser("list", parents=[common], help="show recent stored alerts")
     p_list.add_argument("query", nargs="?",
                         help="filter to alerts whose guid/title contains this substring")

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xml:base="http://www.fsis.usda.gov/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Recalls Feed</title>
+    <link>http://www.fsis.usda.gov/</link>
+    <description></description>
+    <language>en</language>
+
+    <item>
+      <title>Brazilian Taste Recalls Frozen Chicken and Beef Croquette Products Due to Misbranding and an Undeclared Allergen</title>
+      <link>http://www.fsis.usda.gov/recalls-alerts/brazilian-taste-recalls-frozen-chicken-and-beef-croquette-products</link>
+      <description><![CDATA[<img align="left" src="https://www.fsis.usda.gov/sites/default/files/2023-04/Icon-Recalls.png"/> WASHINGTON, Sep. 11, 2026 – Brazilian Taste, a Lexington, S.C. establishment, is recalling approximately 4,120 pounds of chicken and beef croquettes due to misbranding and an undeclared allergen (milk).]]></description>
+      <pubDate>Fri, 11 Sep 2026 12:00:00 +0000</pubDate>
+      <dc:creator>Food Safety and Inspection Service</dc:creator>
+      <guid isPermaLink="true">http://www.fsis.usda.gov/recalls-alerts/brazilian-taste-recalls-frozen-chicken-and-beef-croquette-products</guid>
+    </item>
+    <item>
+      <title>FSIS Issues Public Health Alert for Ready-To-Eat Meals That May Be Contaminated With Listeria</title>
+      <link>http://www.fsis.usda.gov/recalls-alerts/fsis-issues-public-health-alert-ready-eat-meals-listeria</link>
+      <description><![CDATA[<img align="left" src="https://www.fsis.usda.gov/sites/default/files/2023-04/Icon-pha.png"/> WASHINGTON, Sep. 10, 2026 – The U.S. Department of Agriculture's Food Safety and Inspection Service (FSIS) is issuing a public health alert for ready-to-eat meals that may be contaminated with Listeria monocytogenes.]]></description>
+      <pubDate>Thu, 10 Sep 2026 09:30:00 +0000</pubDate>
+      <dc:creator>Food Safety and Inspection Service</dc:creator>
+      <guid isPermaLink="true">http://www.fsis.usda.gov/recalls-alerts/fsis-issues-public-health-alert-ready-eat-meals-listeria</guid>
+    </item>
+  </channel>
+</rss>

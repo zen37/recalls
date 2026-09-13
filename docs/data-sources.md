@@ -57,11 +57,52 @@ happen, before the FDA's slower classification/enforcement process.
 - **Updates in place.** A revised notice keeps the same guid; we detect content
   changes via a hash and record them in `alerts_history` (see README).
 
-**Deliberately *not* in scope (US):**
+### FSIS — USDA Recalls & Public Health Alerts
 
-- **USDA FSIS** (meat, poultry, processed egg products) — a *different agency*
-  with its own fast recall feed. Not covered here yet; our current scope is
-  FDA-regulated foods. A candidate future source (see below).
+The USDA Food Safety and Inspection Service feed, covering the products the FDA
+does *not*: **meat, poultry, and processed egg products**. A different agency
+with its own same-day feed, so it is a second US source, not a replacement for
+FDA. Its RSS is shaped exactly like the FDA feed, so parsing reuses the same
+`parse_rss` (no FSIS-specific parser).
+
+| | |
+|---|---|
+| **Feed (RSS)** | `https://www.fsis.usda.gov/fsis-content/rss/recalls.xml` |
+| **Human page** | https://www.fsis.usda.gov/recalls |
+| **Format** | RSS 2.0 (XML) |
+| **Auth** | None (but the CDN may reject non-browser User-Agents — see limits) |
+| **Freshness** | Same day — recalls and public health alerts as FSIS posts them |
+| **Coverage** | FSIS-regulated products: **meat, poultry, processed egg products**; includes both recalls (Class I–III) and public health alerts |
+| **Record identity** | RSS `<guid>` (`isPermaLink="true"`) = the announcement URL. We dedupe on this. |
+| **Config** | None — FSIS always uses its own feed. The single `RECALLS_FEED_URL` override applies only to FDA (honoring it here would point both US feeds at the same URL). |
+
+**Item fields we map** (same mapping as FDA, via `base.parse_rss` → `Alert`):
+
+| RSS element | Alert field | Notes |
+|---|---|---|
+| `guid` | `guid` | stable id / dedupe key; equals the link for this feed |
+| `title` | `title` | headline of the recall / public health alert |
+| `link` | `link` | URL to the full official notice (`/recalls-alerts/...`) |
+| `pubDate` | `published` | RFC-822 (`+0000`) → normalized to ISO-8601 UTC |
+| `description` | `summary` | CDATA HTML (leading icon `<img>` + free-text summary) |
+
+**Known limits we design around:**
+
+- **Bot/CDN filtering.** The feed sits behind Akamai, which returns `403` to
+  requests that don't look like a browser. We send a descriptive `User-Agent`
+  (`RECALLS_USER_AGENT`); if a poll starts 403-ing, a more browser-like UA is
+  the first thing to try. A source failing this way is logged and skipped, so it
+  never blocks the FDA feed (see `poll.py` per-source isolation).
+- **Both recalls and public health alerts.** Unlike FDA, the feed mixes firm
+  recalls with FSIS-issued public health alerts (issued when a recall can't yet
+  be recommended). Both are real, actionable consumer alerts, so we ingest both;
+  we do not try to separate them (no severity/class modeling — that's `recalls-os`).
+- **HTML in the summary.** `description` is CDATA HTML leading with an icon
+  `<img>`; we store it verbatim (same as the feed gives it). Any stripping is a
+  presentation concern for a future UI/notifier, not ingestion.
+- **Rolling window & "updates in place"** behave like FDA (see above): a revised
+  notice keeps its guid; content changes are caught by hash and recorded in
+  `alerts_history`.
 
 ---
 

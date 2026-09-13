@@ -11,7 +11,9 @@ FDA Recalls RSS ─▶ fetch ─▶ land raw ─▶ parse ─▶ classify new/up
 
 **Lead source:** the FDA "Recalls, Market Withdrawals & Safety Alerts" RSS feed —
 same-day announcements covering FDA-regulated foods (produce, dairy, packaged
-foods), drugs, and cosmetics. Every source is cataloged per country in
+foods), drugs, and cosmetics. The US also polls **USDA FSIS** (meat, poultry, and
+processed egg products — the foods the FDA does not cover), whose feed is the same
+RSS shape. Every source is cataloged per country in
 [`docs/data-sources.md`](docs/data-sources.md).
 
 ## Scope
@@ -54,15 +56,17 @@ uv run pytest                                           # tests (offline; RSS fi
 
 `poll` requires an explicit `--country` and `--source` — no silent defaults on
 the write path, so a prod/cron invocation always states exactly what it fetches.
-`--source` is a source name (e.g. `fda`) or `all` for every feed of the country.
-(`list`/`history` still default to `us`; they only read the store.)
+`--source` is a source name (`fda`, `fsis`) or `all` for every feed of the
+country. (`list`/`history` also require `--country`, so a read never silently
+hits the wrong per-country db.)
 
-Poll on a schedule with cron/systemd, e.g. every 15 min. Give each source its own
-line — sources can warrant different cadences, and one feed being down must not
-delay another:
+Poll on a schedule with cron/systemd. Give each source its own line — sources can
+warrant different cadences, and one feed being down must not delay another — e.g.
+FDA every 15 min, FSIS every 30:
 
 ```
-*/15 * * * * cd /path/to/recalls && uv run python -m recalls poll --country us --source fda >> poll.log 2>&1
+*/15 * * * * cd /path/to/recalls && uv run python -m recalls poll --country us --source fda  >> poll.log 2>&1
+*/30 * * * * cd /path/to/recalls && uv run python -m recalls poll --country us --source fsis >> poll.log 2>&1
 ```
 
 A single source failing is logged and skipped, and the run still exits 0 as long
@@ -96,7 +100,8 @@ recalls/
     __init__.py  country -> sources registry; sources_for(country)
     us/          United States
       fda.py       FdaSource (FDA Recalls RSS)
-      __init__.py  SOURCES = [FdaSource()]
+      fsis.py      FsisSource (USDA FSIS meat/poultry/egg recalls RSS)
+      __init__.py  SOURCES = [FdaSource(), FsisSource()]
     ca/          Canada — skeleton to fill in (see "Adding a country")
       cfia.py      CfiaSource stub (not implemented)
       __init__.py  SOURCES = []
